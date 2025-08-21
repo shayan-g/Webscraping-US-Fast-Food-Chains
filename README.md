@@ -28,4 +28,4 @@ This project analyzes the geographic distribution and market impact of 9 major r
 
 ## Technical Stack: 
 
-- R with dplyr, stringr, tibble, tidyverse, rvest for web scraping, yfR for financial data
+- R with stringr, tibble, tidyverse, rvest for web scraping, yfR for financial data
