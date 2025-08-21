@@ -19,7 +19,6 @@ Libraries that we will be using
 ```{r}
 library(rvest)
 library(tidyverse)
-library(dplyr)
 library(stringr)
 library(tibble)
 ```
@@ -540,5 +539,6 @@ It looks like the financial data does match what I expect for the most part base
 * Some caveats are that per-share price isn’t comparable across firms; tickers reflect global, multi-brand parents, while counts are U.S. store brand-level
 
 * I think that store scale helps explain valuation, but unit economics, franchise mix, and growth drive the true differences.
+
 
 Next steps (better test): Scrape data related to the USD market cap/EV to a global footprint or revenue/margin proxy and incorporate into analysis
