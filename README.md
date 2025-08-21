@@ -26,6 +26,11 @@ This project analyzes the geographic distribution and market impact of 9 major r
 - Financial data collected for publicly traded companies only
 - All datasets joined on state identifiers for comprehensive analysis
 
+### Viewing
+
+- Download the HTML File to View it in your browser
+- Open the PDF document within this repository and make sure to show all of the pages
+
 ## Technical Stack: 
 
 - R with stringr, tibble, tidyverse, rvest for web scraping, yfR for financial data
