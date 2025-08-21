@@ -4,7 +4,7 @@
 
 This project analyzes the geographic distribution and market impact of 9 major restaurant and coffee chains across the United States. The analysis combines web-scraped store location data with U.S. Census population data and stock market information to try and draw comparisons with one another.
 
-## Questions the RMarkdown Explores
+## Questions the R Code Explores
 
 - Are some chains more prevalent in certain states or regions despite having fewer stores overall?
 - Which chains achieve the highest market penetration relative to local population?
