@@ -1,0 +1,544 @@
+---
+title: "Webscraping U.S. Fast Food Chains Data"
+author: "Shayan Golshan"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3   
+---
+
+```{r setup, include=FALSE, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+Libraries that we will be using
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(tibble)
+```
+
+
+
+# 1. Function Definition
+
+```{r}
+stateabb <- function(state) {
+    if("District of Columbia" %in% state){
+      return ("DC")
+    }
+    
+    if("Virginia" %in% state){
+      return ("VA")
+    }
+  
+    if("West VA" %in% state){
+      return("WV")
+    }
+    
+    loc <- grep(state, state.name)
+    stateA <- state.abb[loc]
+    return(stateA)
+  }
+
+
+readURL <- function (data){
+      URL <- 
+        data
+      
+      Link <- 
+        read_html(URL)
+      
+      Html <- 
+        html_nodes(Link, css=".list-unstyled-links")
+      
+      html2 <-
+        html_nodes(Link, css="h1")
+      
+      Data <- 
+        html_text2(Html)
+      
+      companyName <- 
+        html_text2(html2)
+      
+      split <- 
+        str_split(Data, "\n")
+  
+      splitDF <-
+        as.data.frame(split)
+  
+      states <- 
+        str_extract(splitDF[,1], ".*(?=  or| McDonald's| Starbucks| Peet's| Dunkin'| Panera| Caribou| Au Bon| The Coffee| Tim)")
+        print(states)
+  
+      urlDF <- 
+        splitDF %>% 
+        mutate(
+               State = map_chr(states, ~{
+                  r <- stateabb(.x)
+                  if (length(r) == 0) NA_character_ else paste(r, collapse = ", ")
+                 }),
+               Count = parse_number(splitDF[,1]),
+               CompanyName = str_extract(companyName, ".*(?= Loc)")
+        )
+      
+      newDF <- 
+        urlDF[-1] 
+      
+      DF <-
+        newDF %>%
+        drop_na()
+      
+      newDF <- 
+        DF %>% filter(State != 	
+      "character(0)")
+  
+    return(newDF)
+  
+    }
+```
+
+# 2. Scraping the Data from the Websites
+
+```{r}
+starbs <- 
+  readURL("https://web.archive.org/web/20240331211512/https://www.menuism.com/restaurant-locations/starbucks-coffee-39564")
+
+dd <- 
+  readURL("https://web.archive.org/web/20211025021928/http://www.menuism.com/restaurant-locations/dunkin-donuts-181624")
+
+peets <- 
+  readURL("https://web.archive.org/web/20240618034417/https://www.menuism.com/restaurant-locations/peets-coffee-tea-84051")
+
+panera <- 
+  readURL("https://web.archive.org/web/20240617000440/http://www.menuism.com/restaurant-locations/panera-bread-4258")
+
+caribou <- 
+  readURL("https://web.archive.org/web/20220814224211/http://www.menuism.com/restaurant-locations/caribou-coffee-164861")
+
+pain <- 
+  readURL("https://web.archive.org/web/20231004193712/http://www.menuism.com/restaurant-locations/au-bon-pain-69342")
+
+beanleaf <- 
+  readURL("https://web.archive.org/web/20220628010828/http://www.menuism.com/restaurant-locations/the-coffee-bean-tea-leaf-165988")
+
+mcD <- 
+  readURL("https://web.archive.org/web/20240224131056/http://www.menuism.com/restaurant-locations/mcdonalds-21019")
+
+tim <- 
+  readURL("https://web.archive.org/web/20220809051154/https://www.menuism.com/restaurant-locations/tim-hortons-190025")
+```
+
+# 3. Checking the Contents of the Websites
+
+```{r}
+head(starbs, 10)
+
+head(dd, 10)
+
+head(peets, 10)
+
+head(panera, 10)
+
+head(caribou, 10)
+
+head(pain, 10)
+
+head(beanleaf,10)
+
+head(mcD, 10)
+# Some non-United States locations were being aggregated since McDonald's is very popular.  We will focus only on the United States Fast Food Locations
+mcD <- mcD[-c(52, 53), ]
+
+head(tim, 10)
+```
+
+# 4. Getting Population Data for the United States
+
+```{r}
+populationURL <- 
+    "https://simple.wikipedia.org/wiki/List_of_U.S._states_by_population"
+
+populationLink <- 
+    read_html(populationURL)
+
+populationHtml <- 
+    html_nodes(populationLink, css="table")
+
+populationData <- 
+    html_table(populationHtml[[1]])
+
+populationDataDF <-
+  populationData[-c(30, 53:56, 57:60),]
+
+populationDataDF$State <- 
+  str_replace_all(
+    populationDataDF$State,
+    setNames(
+      vapply(populationDataDF$State, function(s) {
+        r <- stateabb(s)
+        if (length(r) == 0) s else r[1]
+      }, FUN.VALUE = character(1)),
+      populationDataDF$State
+    )
+  )
+
+populationDataDF
+```
+
+```{r}
+populationDataDF$State
+```
+
+Cleaning up the States inside the scraped data to ensure a clean join.
+
+
+```{r}
+cleanPopulation <- function(x) {
+  x <- trimws(x)
+  out <- rep(NA_character_, length(x))
+
+  lut <- setNames(
+    c(state.abb, "DC", "WV"),
+    c(state.name, "District of Columbia", "West VA")
+  )
+
+  idx <- match(x, names(lut))
+  out[!is.na(idx)] <- lut[idx[!is.na(idx)]]
+
+  valid_abbs <- c(state.abb, "DC")
+  is_valid <- toupper(x) %in% valid_abbs
+  out[is_valid] <- toupper(x[is_valid])
+
+  drop_pr <- toupper(x) %in% c("Puerto Rico", "PR")
+  out[drop_pr] <- NA_character_
+
+  out
+}
+```
+
+
+```{r}
+populationDataDF$State <- cleanPopulation(populationDataDF$State)
+populationDataDF <- subset(populationDataDF, !is.na(State))
+print(populationDataDF$State)
+```
+
+
+# 5. Joining all of the scraped dataframes with eachother
+
+```{r}
+bigDataset <- rbind(mcD, starbs, beanleaf, pain, panera, peets, tim, caribou, dd)
+
+bigDataset <-
+  bigDataset %>%
+  mutate(
+    State = as.character(State)
+  )
+
+joined <-
+  full_join(bigDataset, populationDataDF, by = c("State" = "State"))
+
+head(joined, 10)
+```
+
+# 6. Getting the Financial Data
+
+## Now, let's use the yfR library to get the stock prices of the companies that we can.  
+
+* Unfortunately, Dunkin' Donuts, Panera Bread, Caribou Coffee, and Au Bon Pain are all owned by private brands now, so the stock data returns as null values.  
+
+```{r}
+table(joined$CompanyName)
+```
+
+```{r}
+library(yfR)
+
+tickers <- c("MCD","JDEP.AS","SBUX","JBFCF","QSR")
+raw <- yf_get(tickers = tickers, first_date = Sys.Date()-7, last_date = Sys.Date())
+latest <- raw %>%
+  slice_max(ref_date, n = 1) %>%
+  transmute(Ticker = ticker, Price = price_adjusted)
+latest
+```
+
+
+```{r}
+companyName_lookup <- tribble(
+  ~CompanyName,                         ~Ticker,
+  "Au Bon Pain",                  NA_character_,   # private
+  "Caribou Coffee",               NA_character_,   # private
+  "Dunkin' Donuts",               NA_character_,   # private
+  "McDonald's",                   "MCD",
+  "Panera Bread",                 NA_character_,   # private
+  "Peet's Coffee & Tea",          "JDEP.AS",       # JDE Peet’s (Euronext); US OTC alt: JDEPF
+  "Starbucks Coffee",             "SBUX",
+  "The Coffee Bean & Tea Leaf",   "JBFCF",         # Jollibee (OTC US); primary: JFC.PS
+  "Tim Hortons",                  "QSR"            # Restaurant Brands International
+)
+```
+
+
+```{r}
+stock_data <- full_join(companyName_lookup, latest, by = c("Ticker" = "Ticker"))
+head(stock_data, 10)
+```
+
+Now, let's join the stock data to the population data.
+
+```{r}
+populationStocks_fullDF <- full_join(stock_data, joined, by = c("CompanyName" = "CompanyName"))
+# removing the nulls removes the privately owned corporations
+populationStocks_noNullsDF <- full_join(stock_data, joined, by = c("CompanyName" = "CompanyName")) %>% drop_na()
+```
+
+
+# 7. Regional and Population Analysis
+
+```{r}
+northeast <- 
+  c("CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA")
+northeastTF <- 
+  populationStocks_fullDF$State %in% northeast
+
+midwest <-
+  c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD")
+midwestTF <-
+  populationStocks_fullDF$State %in% midwest
+
+south <-
+  c("DE", "FL", "GA", "MD", "NC", "SC", "VA", "DC", "WV", "AL", "KY", "MS", "TN", "AR", "LA", "OK", "TX")
+southTF <-
+  populationStocks_fullDF$State %in% south
+
+west <-
+  c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA")
+westTF <-
+  populationStocks_fullDF$State %in% west
+
+
+populationStocks_fullDF$Region <- 
+  as.factor(ifelse(northeastTF == TRUE, "Northeast",
+          ifelse(midwestTF == TRUE, "Midwest",
+          ifelse(southTF == TRUE, "South",
+          ifelse(westTF == TRUE, "West", "NULL")
+         )
+        )
+       )
+      )
+
+head(populationStocks_fullDF, 10)
+```
+
+
+## Q: What are the top chains by region?
+
+```{r}
+#Northeast
+populationStocks_fullDF %>%
+  filter(Region=="Northeast") %>%
+  group_by(Region, CompanyName, State) %>%
+  summarize(Count) %>%
+  arrange(desc(Count))
+
+#Midwest
+populationStocks_fullDF %>%
+  filter(Region=="Midwest") %>%
+  group_by(Region, CompanyName, State) %>%
+  summarize(Count) %>%
+  arrange(desc(Count))
+
+#South
+populationStocks_fullDF %>%
+  filter(Region=="South") %>%
+  group_by(Region, CompanyName, State) %>%
+  summarize(Count) %>%
+  arrange(desc(Count))
+
+#West
+populationStocks_fullDF %>%
+  filter(Region=="West") %>%
+  group_by(Region, CompanyName, State) %>%
+  summarize(Count) %>%
+  arrange(desc(Count))
+```
+
+## Q: Are some of these chains more prevalent in certain states than others? Possibly despite having less stores overall? Same questions for regions instead of states.
+
+```{r}
+top_states <- populationStocks_fullDF %>%
+  group_by(CompanyName, State) %>%
+  summarise(stores = sum(Count), .groups = "drop_last") %>%
+  mutate(share_of_chain = stores / sum(stores)) %>%   # within-chain share
+  group_by(CompanyName) %>%
+  slice_max(share_of_chain, n = 5, with_ties = FALSE) %>%
+  arrange(CompanyName, desc(share_of_chain))
+
+top_states
+```
+
+```{r}
+most_prevalent_chains_states <- top_states %>%
+  group_by(CompanyName) %>% group_split()
+
+most_prevalent_chains_states
+```
+
+Here is each company's top 5 states by share of each company’s total U.S. stores
+
+* Au Bon Pain shows strong Northeast concentration with Massachusetts (20.2%) and New York (17.5%)
+
+* Caribou Coffee demonstrates extreme regional focus with Minnesota alone accounting for 50.1% of all locations
+
+* Dunkin' Donuts maintains Northeast dominance across Massachusetts (17.0%) and New York (15.8%)
+
+* McDonald's shows more geographic distribution with California (9.7%) and Texas (7.8%) leading
+
+* Panera Bread has relatively even distribution with Florida (9.6%) and California (9.1%) at the top
+
+* Peet's Coffee & Tea exhibits extreme California concentration at 82.7%
+
+* Starbucks shows California preference (22.9%) but more geographic spread
+
+* The Coffee Bean & Tea Leaf is heavily California-focused (70.6%)
+
+* Tim Hortons concentrates in Michigan (38.2%) and Ohio (21.0%), reflecting its Canadian heritage in border states
+
+
+```{r}
+top_regions <- populationStocks_fullDF %>%
+  group_by(CompanyName, Region) %>%
+  summarise(stores = sum(Count), .groups = "drop_last") %>%
+  mutate(share_of_chain = stores / sum(stores)) %>%
+  group_by(CompanyName) %>%
+  slice_max(share_of_chain, n = 3, with_ties = FALSE) %>%
+  arrange(CompanyName, desc(share_of_chain))
+
+top_regions
+```
+
+```{r}
+most_prevalent_chains_regions <- top_regions %>%
+  group_by(CompanyName) %>% group_split()
+
+most_prevalent_chains_regions
+```
+
+Now, when we looking at the top regions, many of these chains appear to be very concentrated in their area
+
+* Au Bon Pain is Northeast-focused (55.4%)
+
+* Caribou Coffee heavily concentrates in the Midwest (83.5%)
+
+* Dunkin' Donuts dominates the Northeast (59.7%)
+
+* McDonald's shows the most even distribution with slight South preference (39.6%)
+
+* Panera Bread favors the South (34.0%) and Midwest (31.5%)
+
+* Peet's Coffee & Tea is almost exclusively Western (96.4%)
+
+* Starbucks leads in the West (42.9%) but maintains significant presence across regions
+
+* The Coffee Bean & Tea Leaf is nearly exclusively Western (96.4%)
+
+* Tim Hortons concentrates in the Midwest (61.8%) and Northeast (35.8%)
+
+```{r}
+state_density <- populationStocks_fullDF %>%
+  mutate(
+    pop_2020 = as.numeric(gsub("[^0-9.]", "", `Census population, April 1, 2020[1][2]`)),
+    Count    = as.numeric(Count)
+  ) %>%
+  group_by(CompanyName, State) %>%
+  summarise(
+    stores   = sum(Count, na.rm = TRUE),
+    pop_2020 = first(pop_2020),
+    .groups  = "drop"
+  ) %>%
+  mutate(stores_per_100K = stores / pop_2020 * 1e5) %>%
+  group_by(CompanyName) %>%
+  slice_max(stores_per_100K, n = 5, with_ties = FALSE) %>%
+  arrange(CompanyName, desc(stores_per_100K))
+
+state_density
+```
+
+```{r}
+pop_density_by_company <- state_density %>%
+  group_by(CompanyName) %>% group_split()
+
+pop_density_by_company
+```
+
+Here, I calculated stores per 100,000 population to identify where chains achieve highest market exposure relative to local population. 
+
+* Au Bon Pain achieves remarkable density in Washington DC (3.05 stores per 100K)
+
+* Caribou Coffee shows exceptional penetration in Minnesota (5.47 per 100K)
+
+* Dunkin' Donuts demonstrates extraordinary Northeast density with Massachusetts leading at 15.7 per 100K
+
+* McDonald's shows highest density in Ohio (7.14 per 100K), Panera Bread peaks in Missouri (1.48 per 100K)
+
+* Peet's Coffee & Tea maintains modest California density (0.41 per 100K)
+
+* Starbucks achieves highest density in Washington DC (10.4 per 100K)
+
+* The Coffee Bean & Tea Leaf shows strongest penetration in Hawaii (1.51 per 100K)
+
+* Tim Hortons achieves highest density in Rhode Island (2.37 per 100K)
+
+Several brands are regional specialists (Peet’s and Coffee Bean in the West, Caribou in the Upper Midwest, Au Bon Pain and Dunkin’ in the Northeast), while McDonald’s and Starbucks are broadly national. When ranking while adjusted for population, small states and D.C. draw different results—e.g., Dunkin’ in MA, Caribou in MN, and Starbucks/Au Bon Pain in DC—proving deep local penetration can matter more than raw store counts. Overall, the data highlights home-market advantages and urban concentration (notably DC), confirming that some chains are far more prevalent in specific states and regions even if they don’t have the most locations overall.
+
+
+# 8. Financial Analysis
+
+## Q: Do the financial data match what you’d expect based on the number and locations (footprint) of the stores? Why or why not?
+
+```{r}
+financial_check <- populationStocks_fullDF %>%
+  mutate(Price = suppressWarnings(as.numeric(Price))) %>%
+  group_by(CompanyName) %>%
+  summarise(
+    total_stores   = sum(as.numeric(Count), na.rm = TRUE),
+    stock_price    = median(Price, na.rm = TRUE),   # robust per company
+    states_present = n_distinct(State[State %in% state.abb]),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(stock_price)) %>%                        # public only
+  mutate(
+    footprint  = total_stores * log1p(states_present), # use logs to respond to skewness of states_present, attempt to "dampen" the spread
+    store_rank     = dense_rank(desc(total_stores)),
+    footprint_rank = dense_rank(desc(footprint)),
+    price_rank     = dense_rank(desc(stock_price))
+  )
+
+# How aligned are price and footprint among the public names?
+spearman_r <- suppressWarnings(cor(financial_check$stock_price,
+                                   financial_check$footprint,
+                                   method = "spearman",
+                                   use = "complete.obs"))
+
+
+spearman_r
+financial_check
+```
+It looks like the financial data does match what I expect for the most part based on the number and locations (footprint), with some caveats.
+
+* Price broadly matches footprint for the big three — McDonald’s (Ranks 1/1/1), Starbucks (2/2/2), Tim Hortons (3/3/3).
+
+* Peet’s looks slightly rich (price 4 vs. footprint 5); Coffee Bean slightly cheap (5 vs. 4)
+
+* Some caveats are that per-share price isn’t comparable across firms; tickers reflect global, multi-brand parents, while counts are U.S. store brand-level
+
+* I think that store scale helps explain valuation, but unit economics, franchise mix, and growth drive the true differences.
+
+Next steps (better test): Scrape data related to the USD market cap/EV to a global footprint or revenue/margin proxy and incorporate into analysis
